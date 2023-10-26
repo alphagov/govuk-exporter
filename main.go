@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/caarlos0/env/v9"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
@@ -13,11 +14,29 @@ import (
 
 var httpClient = &http.Client{}
 
+type Config struct {
+	MirrorFreshnessUrl string        `env:"MIRROR_FRESHNESS_URL"`
+	Backends           []string      `env:"BACKENDS" envSeparator:","`
+	RefreshInterval    time.Duration `env:"REFRESH_INTERVAL" envDefault:"4h"`
+}
+
 type metrics struct {
 	mirrorLastUpdatedGauge *prometheus.GaugeVec
 }
 
-func NewMetrics(reg prometheus.Registerer) *metrics {
+func newConfig() (*Config, error) {
+	cfg := Config{}
+
+	err := env.Parse(&cfg)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+
+func newMetrics(reg prometheus.Registerer) *metrics {
 	m := &metrics{
 		mirrorLastUpdatedGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "govuk_mirror_last_updated_time",
@@ -28,8 +47,8 @@ func NewMetrics(reg prometheus.Registerer) *metrics {
 	return m
 }
 
-func fetchMirrorFreshnessMetric(backend string) (float64, error) {
-	req, err := http.NewRequest("GET", "https://www.gov.uk/last-updated.txt", nil)
+func fetchMirrorFreshnessMetric(backend string, url string) (float64, error) {
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return -1, err
 	}
@@ -50,8 +69,8 @@ func fetchMirrorFreshnessMetric(backend string) (float64, error) {
 	return float64(t.Unix()), nil
 }
 
-func updateMirrorLastUpdatedGauge(backend string, m *metrics) error {
-	freshness, err := fetchMirrorFreshnessMetric(backend)
+func updateMirrorLastUpdatedGauge(m *metrics, url string, backend string) error {
+	freshness, err := fetchMirrorFreshnessMetric(backend, url)
 	if err != nil {
 		return err
 	}
@@ -60,13 +79,11 @@ func updateMirrorLastUpdatedGauge(backend string, m *metrics) error {
 	return nil
 }
 
-func updateMetrics(m *metrics) {
-	backends := []string{"mirrorS3", "mirrorS3Replica", "mirrorGCS"}
-
+func updateMetrics(m *metrics, cfg *Config) {
 	for {
-		time.Sleep(5 * time.Second)
-		for _, backend := range backends {
-			err := updateMirrorLastUpdatedGauge(backend, m)
+		time.Sleep(cfg.RefreshInterval)
+		for _, backend := range cfg.Backends {
+			err := updateMirrorLastUpdatedGauge(m, cfg.MirrorFreshnessUrl, backend)
 			if err != nil {
 				log.Error().Str("metric", "govuk_mirror_last_updated_time").Str("backend", backend).Err(err).Msg("Error updating metrics")
 			}
@@ -94,11 +111,14 @@ func checkError(err error, message string) {
 func main() {
 	initLogger()
 
+	cfg, err := newConfig()
+	checkError(err, "Error parsing configuration")
+
 	// Create a non-global registry.
 	reg := prometheus.NewRegistry()
-	m := NewMetrics(reg)
+	m := newMetrics(reg)
 
-	go updateMetrics(m)
+	go updateMetrics(m, cfg)
 
 	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
 	checkError(http.ListenAndServe(":8000", nil), "Server error")

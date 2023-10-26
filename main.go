@@ -81,13 +81,13 @@ func updateMirrorLastUpdatedGauge(m *metrics, url string, backend string) error 
 
 func updateMetrics(m *metrics, cfg *Config) {
 	for {
-		time.Sleep(cfg.RefreshInterval)
 		for _, backend := range cfg.Backends {
 			err := updateMirrorLastUpdatedGauge(m, cfg.MirrorFreshnessUrl, backend)
 			if err != nil {
 				log.Error().Str("metric", "govuk_mirror_last_updated_time").Str("backend", backend).Err(err).Msg("Error updating metrics")
 			}
 		}
+		time.Sleep(cfg.RefreshInterval)
 	}
 }
 

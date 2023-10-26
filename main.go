@@ -1,12 +1,14 @@
 package main
 
 import (
-	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 var httpClient = &http.Client{}
@@ -66,20 +68,38 @@ func updateMetrics(m *metrics) {
 		for _, backend := range backends {
 			err := updateMirrorLastUpdatedGauge(backend, m)
 			if err != nil {
-				log.Printf("Error updating metrics: %s", err)
+				log.Error().Str("metric", "govuk_mirror_last_updated_time").Str("backend", backend).Err(err).Msg("Error updating metrics")
 			}
 		}
 	}
 }
 
+func initLogger() {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	logLevel, ok := os.LookupEnv("LOG_LEVEL")
+	if !ok {
+		logLevel = "INFO"
+	}
+	level, err := zerolog.ParseLevel(logLevel)
+	checkError(err, "Error parsing log level")
+	zerolog.SetGlobalLevel(level)
+}
+
+func checkError(err error, message string) {
+	if err != nil {
+		log.Fatal().Err(err).Msg(message)
+	}
+}
+
 func main() {
+	initLogger()
+
 	// Create a non-global registry.
 	reg := prometheus.NewRegistry()
-
 	m := NewMetrics(reg)
 
 	go updateMetrics(m)
 
 	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
-	log.Fatal(http.ListenAndServe(":8000", nil))
+	checkError(http.ListenAndServe(":8000", nil), "Server error")
 }

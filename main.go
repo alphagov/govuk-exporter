@@ -121,5 +121,5 @@ func main() {
 	go updateMetrics(m, cfg)
 
 	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
-	checkError(http.ListenAndServe(":8000", nil), "Server error")
+	checkError(http.ListenAndServe(":9090", nil), "Server error")
 }

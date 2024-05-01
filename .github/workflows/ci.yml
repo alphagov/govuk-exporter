@@ -32,8 +32,3 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.54
-          # caching issues, see: https://github.com/golangci/golangci-lint-action/issues/244#issuecomment-1052190775
-          skip-pkg-cache: true
-          skip-build-cache: true

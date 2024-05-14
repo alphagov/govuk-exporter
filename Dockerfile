@@ -1,6 +1,7 @@
 ARG go_registry=""
-ARG go_version=1.21
+ARG go_version=1.22
 ARG go_tag_suffix=-alpine
+
 
 FROM ${go_registry}golang:${go_version}${go_tag_suffix} AS builder
 ARG TARGETARCH TARGETOS
@@ -13,6 +14,7 @@ RUN go mod download
 
 COPY . ./
 RUN go build -o /bin/govuk-exporter main.go
+
 
 FROM scratch
 COPY --from=builder /bin/govuk-exporter /bin/govuk-exporter

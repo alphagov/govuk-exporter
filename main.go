@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -57,6 +58,10 @@ func fetchMirrorFreshnessMetric(backend string, url string) (float64, error) {
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return -1, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return -1, fmt.Errorf("request failed with status code: %s", resp.Status)
 	}
 
 	lastModified := resp.Header.Get("Last-Modified")

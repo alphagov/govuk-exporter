@@ -22,7 +22,7 @@ func setup() (*metrics, *Config) {
 	return m, cfg
 }
 
-func createTestServer(lastModified time.Time) *httptest.Server {
+func createTestServer(lastModified time.Time, statusCode int) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		backend := r.Header.Get("Backend-Override")
 		if backend == "backend1" || backend == "backend2" {
@@ -31,6 +31,7 @@ func createTestServer(lastModified time.Time) *httptest.Server {
 			}
 
 			w.Header().Set("Last-Modified", lastModified.Format(http.TimeFormat))
+			w.WriteHeader(statusCode)
 		} else {
 			http.Error(w, "Backend-Override header not set to backend1 or backend2", http.StatusBadRequest)
 		}
@@ -39,7 +40,7 @@ func createTestServer(lastModified time.Time) *httptest.Server {
 
 func TestFetchMirrorFreshnessMetric(t *testing.T) {
 	timestamp := time.Date(2006, time.January, 2, 15, 4, 5, 0, time.UTC)
-	ts := createTestServer(timestamp)
+	ts := createTestServer(timestamp, http.StatusOK)
 	defer ts.Close()
 
 	freshness, err := fetchMirrorFreshnessMetric("backend1", ts.URL)
@@ -49,11 +50,21 @@ func TestFetchMirrorFreshnessMetric(t *testing.T) {
 	assert.Equal(t, expectedFreshness, freshness)
 }
 
+func TestFetchMirrorFreshnessMetric500StatusCode(t *testing.T) {
+	timestamp := time.Date(2006, time.January, 2, 15, 4, 5, 0, time.UTC)
+	ts := createTestServer(timestamp, http.StatusInternalServerError)
+	defer ts.Close()
+
+	_, err := fetchMirrorFreshnessMetric("backend1", ts.URL)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "request failed with status code")
+}
+
 func TestUpdateMetrics(t *testing.T) {
 	m, cfg := setup()
 
 	timestamp := time.Date(2006, time.January, 2, 15, 4, 5, 0, time.UTC)
-	ts := createTestServer(timestamp)
+	ts := createTestServer(timestamp, http.StatusOK)
 	defer ts.Close()
 
 	cfg.MirrorFreshnessUrl = ts.URL

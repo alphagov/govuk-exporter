@@ -15,9 +15,10 @@ func setup() (*metrics, *Config) {
 	reg := prometheus.NewRegistry()
 	m := newMetrics(reg)
 	cfg := &Config{
-		MirrorFreshnessUrl: "http://mirror.test/freshness",
-		Backends:           []string{"backend1", "backend2"},
-		RefreshInterval:    1 * time.Hour,
+		MirrorFreshnessUrl:    "http://mirror.test/freshness",
+		MirrorAvailabilityUrl: "http://mirror.test/availability",
+		Backends:              []string{"backend1", "backend2"},
+		RefreshInterval:       1 * time.Hour,
 	}
 	return m, cfg
 }
@@ -60,6 +61,28 @@ func TestFetchMirrorFreshnessMetric500StatusCode(t *testing.T) {
 	assert.Contains(t, err.Error(), "request failed with status code")
 }
 
+func TestFetchMirrorAvailabilityMetric200StatusCode(t *testing.T) {
+	timestamp := time.Date(2006, time.January, 2, 15, 4, 5, 0, time.UTC)
+	ts := createTestServer(timestamp, http.StatusOK)
+	defer ts.Close()
+
+	responseCode, err := fetchMirrorAvailabilityMetric("backend1", ts.URL)
+	assert.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, responseCode)
+}
+
+func TestFetchMirrorAvailabilityMetric500StatusCode(t *testing.T) {
+	timestamp := time.Date(2006, time.January, 2, 15, 4, 5, 0, time.UTC)
+	ts := createTestServer(timestamp, http.StatusInternalServerError)
+	defer ts.Close()
+
+	responseCode, err := fetchMirrorAvailabilityMetric("backend1", ts.URL)
+	assert.NoError(t, err)
+
+	assert.Equal(t, http.StatusInternalServerError, responseCode)
+}
+
 func TestUpdateMetrics(t *testing.T) {
 	m, cfg := setup()
 
@@ -68,6 +91,7 @@ func TestUpdateMetrics(t *testing.T) {
 	defer ts.Close()
 
 	cfg.MirrorFreshnessUrl = ts.URL
+	cfg.MirrorAvailabilityUrl = ts.URL
 
 	go updateMetrics(m, cfg)
 
@@ -76,4 +100,8 @@ func TestUpdateMetrics(t *testing.T) {
 	assert.Equal(t, 2, testutil.CollectAndCount(m.mirrorLastUpdatedGauge))
 	assert.Equal(t, float64(timestamp.Unix()), testutil.ToFloat64(m.mirrorLastUpdatedGauge.WithLabelValues("backend1")))
 	assert.Equal(t, float64(timestamp.AddDate(0, 0, -1).Unix()), testutil.ToFloat64(m.mirrorLastUpdatedGauge.WithLabelValues("backend2")))
+
+	assert.Equal(t, 2, testutil.CollectAndCount(m.mirrorResponseStatusCode))
+	assert.Equal(t, float64(http.StatusOK), testutil.ToFloat64(m.mirrorResponseStatusCode.WithLabelValues("backend1")))
+	assert.Equal(t, float64(http.StatusOK), testutil.ToFloat64(m.mirrorResponseStatusCode.WithLabelValues("backend2")))
 }

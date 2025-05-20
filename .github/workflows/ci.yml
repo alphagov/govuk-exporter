@@ -9,6 +9,10 @@ on:
       - README.md
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   codeql-sast:
     name: CodeQL SAST scan

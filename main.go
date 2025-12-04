@@ -58,13 +58,13 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 func fetchMirrorAvailabilityMetric(backend string, url string) (httpStatus int, err error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return
+		return 0, err
 	}
 	req.Header.Set("Backend-Override", backend)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return
+		return 0, err
 	}
 
 	return resp.StatusCode, nil
@@ -79,18 +79,18 @@ func fetchMirrorFreshnessMetric(backend string, url string) (seconds float64, er
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return
+		return 0, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return -1, fmt.Errorf("request failed with status code: %s", resp.Status)
+		return 0, fmt.Errorf("request failed with status code: %s", resp.Status)
 	}
 
 	lastModified := resp.Header.Get("Last-Modified")
 
 	t, err := time.Parse(time.RFC1123, lastModified)
 	if err != nil {
-		return
+		return 0, err
 	}
 
 	return float64(t.Unix()), nil
